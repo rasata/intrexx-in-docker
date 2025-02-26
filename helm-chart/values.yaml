@@ -1,0 +1,121 @@
+# Default values for intrexx-portal
+replicaCount: 1
+
+image:
+  repository: unitedplanet/intrexx
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  webconnectorPort: 1337
+  restPort: 8101
+  odataPort: 9090
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "INTREXX_SESSION"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+  hosts:
+    - host: intrexx.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 2
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# Intrexx specific configuration
+intrexx:
+  portalName: portal
+  portalBaseUrl: http://intrexx.local
+  distributed: true
+  
+# Database configuration
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    password: postgres
+    database: intrexx
+  primary:
+    persistence:
+      size: 8Gi
+
+# External database configuration (if postgresql.enabled=false)
+externalDatabase:
+  host: ""
+  port: 5432
+  user: postgres
+  password: postgres
+  database: intrexx
+
+# Solr configuration
+solr:
+  enabled: true
+  authentication:
+    enabled: true
+    adminUsername: solr
+    adminPassword: SolrRocks
+  replicaCount: 1
+  persistence:
+    size: 8Gi
+
+# Zookeeper configuration
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  auth:
+    enabled: true
+    clientUser: solr
+    clientPassword: SolrRocks
+  persistence:
+    size: 8Gi
+
+# Monitoring
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
