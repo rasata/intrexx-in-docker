@@ -1,0 +1,145 @@
+{{- if .Values.intrexx.applications.lifecycle.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}-app-scripts
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+data:
+  deploy-app.sh: |-
+    #!/bin/bash
+    set -e
+    
+    APP_PACKAGE=$1
+    PORTAL_NAME=$2
+    
+    if [ -z "$APP_PACKAGE" ] || [ -z "$PORTAL_NAME" ]; then
+      echo "Usage: $0 <app-package-path> <portal-name>"
+      exit 1
+    fi
+    
+    cd /opt/intrexx/bin
+    ./ixdeployer.sh -a "$APP_PACKAGE" -p "$PORTAL_NAME"
+    
+    echo "Application deployed successfully"
+    
+  update-app.sh: |-
+    #!/bin/bash
+    set -e
+    
+    APP_PACKAGE=$1
+    PORTAL_NAME=$2
+    
+    if [ -z "$APP_PACKAGE" ] || [ -z "$PORTAL_NAME" ]; then
+      echo "Usage: $0 <app-package-path> <portal-name>"
+      exit 1
+    fi
+    
+    cd /opt/intrexx/bin
+    ./ixdeployer.sh -u -a "$APP_PACKAGE" -p "$PORTAL_NAME"
+    
+    echo "Application updated successfully"
+    
+  remove-app.sh: |-
+    #!/bin/bash
+    set -e
+    
+    APP_NAME=$1
+    PORTAL_NAME=$2
+    
+    if [ -z "$APP_NAME" ] || [ -z "$PORTAL_NAME" ]; then
+      echo "Usage: $0 <app-name> <portal-name>"
+      exit 1
+    fi
+    
+    cd /opt/intrexx/bin
+    ./ixdeployer.sh -r -n "$APP_NAME" -p "$PORTAL_NAME"
+    
+    echo "Application $APP_NAME removed successfully"
+    
+  list-apps.sh: |-
+    #!/bin/bash
+    set -e
+    
+    PORTAL_NAME=$1
+    
+    if [ -z "$PORTAL_NAME" ]; then
+      echo "Usage: $0 <portal-name>"
+      exit 1
+    fi
+    
+    cd /opt/intrexx/bin
+    ./ixdeployer.sh -l -p "$PORTAL_NAME"
+---
+{{- if .Values.intrexx.applications.preInstall.enabled }}
+{{- range .Values.intrexx.applications.preInstall.apps }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "intrexx-portal.fullname" $ }}-install-{{ .name }}
+  labels:
+    {{- include "intrexx-portal.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: app-installer
+    app.intrexx.com/name: {{ .name }}
+    app.intrexx.com/version: {{ .version }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "intrexx-portal.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: app-installer
+    spec:
+      serviceAccountName: {{ include "intrexx-portal.serviceAccountName" $ }}
+      initContainers:
+        - name: wait-for-intrexx
+          image: busybox:1.28
+          command: ['sh', '-c', 'until wget -q -O- http://{{ include "intrexx-portal.fullname" $ }}:{{ $.Values.service.webconnectorPort }}/service/ping/; do echo waiting for intrexx; sleep 10; done;']
+        {{- if .packageUrl }}
+        - name: download-package
+          image: busybox:1.28
+          command: ['sh', '-c', 'wget -O /tmp/app/{{ .name }}.zip {{ .packageUrl }}']
+          volumeMounts:
+            - name: app-package
+              mountPath: /tmp/app
+        {{- end }}
+      containers:
+        - name: install-app
+          image: {{ $.Values.intrexx.applications.lifecycle.deployerImage }}
+          command: ["/bin/bash", "/scripts/deploy-app.sh"]
+          args:
+            - "/tmp/app/{{ .name }}.zip"
+            - "{{ $.Values.intrexx.portalName }}"
+          volumeMounts:
+            - name: app-package
+              mountPath: /tmp/app
+            - name: portal-data
+              mountPath: /opt/intrexx/org
+            - name: intrexx-cfg
+              mountPath: /opt/intrexx/cfg
+            - name: app-scripts
+              mountPath: /scripts
+          resources:
+            {{- toYaml $.Values.intrexx.applications.lifecycle.resources | nindent 12 }}
+      restartPolicy: Never
+      volumes:
+        - name: app-package
+          emptyDir: {}
+        - name: portal-data
+          persistentVolumeClaim:
+            claimName: {{ include "intrexx-portal.fullname" $ }}-portal-data
+        - name: intrexx-cfg
+          persistentVolumeClaim:
+            claimName: {{ include "intrexx-portal.fullname" $ }}-cfg
+        - name: app-scripts
+          configMap:
+            name: {{ include "intrexx-portal.fullname" $ }}-app-scripts
+            defaultMode: 0755
+  backoffLimit: 3
+---
+{{- end }}
+{{- end }}
+{{- end }}

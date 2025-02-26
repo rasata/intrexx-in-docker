@@ -73,6 +73,30 @@ intrexx:
   portalBaseUrl: http://intrexx.local
   distributed: true
   
+  # Application management
+  applications:
+    # Pre-installed applications
+    preInstall:
+      enabled: false
+      apps: []
+      # - name: crm
+      #   version: "1.0.0"
+      #   packageUrl: "https://example.com/packages/crm-1.0.0.zip"
+      #   configMap: ""  # Optional: reference to existing ConfigMap with app config
+    
+    # Application lifecycle management
+    lifecycle:
+      enabled: true
+      deployerImage: "unitedplanet/intrexx:latest"
+      serviceAccount: ""  # Uses chart serviceAccount if empty
+      resources:
+        limits:
+          cpu: 1
+          memory: 2Gi
+        requests:
+          cpu: 250m
+          memory: 512Mi
+
 # Database configuration
 postgresql:
   enabled: true
@@ -119,3 +143,13 @@ metrics:
   enabled: true
   serviceMonitor:
     enabled: false
+  
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "0 1 * * *"  # Daily at 1 AM
+  retention: 7  # Number of backups to keep
+  destination: "/backups"
+  includeApplications: true
+  includeDatabase: true
+  includeSolr: true

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.webconnectorPort }}
+      targetPort: webconnector
+      protocol: TCP
+      name: webconnector
+    - port: {{ .Values.service.restPort }}
+      targetPort: rest
+      protocol: TCP
+      name: rest
+    - port: {{ .Values.service.odataPort }}
+      targetPort: odata
+      protocol: TCP
+      name: odata
+  selector:
+    {{- include "intrexx-portal.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}-headless
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - port: {{ .Values.service.webconnectorPort }}
+      targetPort: webconnector
+      protocol: TCP
+      name: webconnector
+  selector:
+    {{- include "intrexx-portal.selectorLabels" . | nindent 4 }}

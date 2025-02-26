@@ -20,5 +20,33 @@ To access your Intrexx Portal, run these commands:
   echo "Visit http://127.0.0.1:8080 to access your Intrexx Portal"
 {{- end }}
 
+{{- if .Values.intrexx.applications.lifecycle.enabled }}
+---------------------------------------------------------
+APPLICATION MANAGEMENT
+---------------------------------------------------------
+
+To manage Intrexx applications, use the following scripts:
+
+1. Deploy a new application:
+   kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-manager-scripts -n {{ .Release.Namespace }} -o jsonpath='{.data.deploy-application\.sh}' > deploy-application.sh
+   chmod +x deploy-application.sh
+   ./deploy-application.sh <app-name> <path-to-app-zip> {{ .Release.Namespace }}
+
+2. Update an existing application:
+   kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-manager-scripts -n {{ .Release.Namespace }} -o jsonpath='{.data.update-application\.sh}' > update-application.sh
+   chmod +x update-application.sh
+   ./update-application.sh <app-name> <path-to-app-zip> {{ .Release.Namespace }}
+
+3. Remove an application:
+   kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-manager-scripts -n {{ .Release.Namespace }} -o jsonpath='{.data.remove-application\.sh}' > remove-application.sh
+   chmod +x remove-application.sh
+   ./remove-application.sh <app-name> {{ .Release.Namespace }}
+
+4. List installed applications:
+   kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-manager-scripts -n {{ .Release.Namespace }} -o jsonpath='{.data.list-applications\.sh}' > list-applications.sh
+   chmod +x list-applications.sh
+   ./list-applications.sh {{ .Release.Namespace }}
+{{- end }}
+
 For more information on using Intrexx in Kubernetes, please refer to the documentation:
 https://your-documentation-url.com

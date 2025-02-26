@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "intrexx-portal.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "intrexx-portal.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "intrexx-portal.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: init-db-check
+          image: busybox:1.28
+          command: ['sh', '-c', 'until nc -z {{ include "intrexx-portal.databaseHost" . }} {{ include "intrexx-portal.databasePort" . }}; do echo waiting for database; sleep 2; done;']
+        - name: init-solr-check
+          image: busybox:1.28
+          command: ['sh', '-c', 'until nc -z {{ include "intrexx-portal.solrHost" . }} {{ include "intrexx-portal.solrPort" . }}; do echo waiting for solr; sleep 2; done;']
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: DB_HOST
+              value: {{ include "intrexx-portal.databaseHost" . }}
+            - name: DB_NAME
+              value: {{ include "intrexx-portal.databaseName" . }}
+            - name: DB_USER
+              value: {{ include "intrexx-portal.databaseUser" . }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "intrexx-portal.databaseSecretName" . }}
+                  key: {{ include "intrexx-portal.databaseSecretKey" . }}
+            - name: SOLR_HOST
+              value: {{ include "intrexx-portal.solrHost" . }}
+            - name: SOLR_PORT
+              value: "{{ include "intrexx-portal.solrPort" . }}"
+            - name: SOLR_USER
+              value: {{ include "intrexx-portal.solrUser" . }}
+            - name: SOLR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "intrexx-portal.solrSecretName" . }}
+                  key: {{ include "intrexx-portal.solrSecretKey" . }}
+            - name: SOLR_PATH
+              value: /solr
+            - name: PORTAL_NAME
+              value: {{ .Values.intrexx.portalName }}
+            - name: PORTAL_BASE_URL
+              value: {{ .Values.intrexx.portalBaseUrl }}
+            - name: IX_DISTRIBUTED
+              value: "{{ .Values.intrexx.distributed }}"
+            - name: IX_DISTRIBUTED_NODELIST
+              value: "{{ include "intrexx-portal.fullname" . }}-headless"
+          ports:
+            - name: webconnector
+              containerPort: 1337
+              protocol: TCP
+            - name: rest
+              containerPort: 8101
+              protocol: TCP
+            - name: odata
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /service/ping/
+              port: webconnector
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /service/ping/
+              port: webconnector
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: portal-data
+              mountPath: /opt/intrexx/org
+            - name: intrexx-cfg
+              mountPath: /opt/intrexx/cfg
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: portal-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "intrexx-portal.fullname" . }}-portal-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: intrexx-cfg
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "intrexx-portal.fullname" . }}-cfg
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

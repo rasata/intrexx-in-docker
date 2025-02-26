@@ -1,0 +1,119 @@
+{{- if .Values.intrexx.applications.lifecycle.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}-app-manager-scripts
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+data:
+  deploy-application.sh: |-
+    #!/bin/bash
+    set -e
+    
+    # This script deploys an Intrexx application to the portal
+    
+    if [ "$#" -lt 2 ]; then
+      echo "Usage: $0 <application-name> <application-zip-file> [namespace]"
+      exit 1
+    fi
+    
+    APP_NAME=$1
+    APP_ZIP=$2
+    NAMESPACE=${3:-intrexx}
+    
+    # Create ConfigMap from application zip
+    echo "Creating ConfigMap for application package..."
+    kubectl create configmap ${APP_NAME}-package --from-file=app.zip=${APP_ZIP} -n ${NAMESPACE}
+    
+    # Get the job template
+    JOB_TEMPLATE=$(kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-job-templates -n ${NAMESPACE} -o jsonpath='{.data.deploy-job\.yaml}')
+    
+    # Replace the placeholder with the actual ConfigMap name
+    JOB_YAML=$(echo "${JOB_TEMPLATE}" | sed "s/APP_PACKAGE_CONFIGMAP/${APP_NAME}-package/g")
+    
+    # Apply the job
+    echo "Creating deployment job..."
+    echo "${JOB_YAML}" | kubectl apply -f - -n ${NAMESPACE}
+    
+    # Get the job name
+    JOB_NAME=$(kubectl get jobs -n ${NAMESPACE} -l app.kubernetes.io/component=app-deployer --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+    
+    echo "Application deployment started. Job name: ${JOB_NAME}"
+    echo "To monitor progress, run: kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE}"
+    
+  update-application.sh: |-
+    #!/bin/bash
+    set -e
+    
+    # This script updates an existing Intrexx application
+    
+    if [ "$#" -lt 2 ]; then
+      echo "Usage: $0 <application-name> <application-zip-file> [namespace]"
+      exit 1
+    fi
+    
+    APP_NAME=$1
+    APP_ZIP=$2
+    NAMESPACE=${3:-intrexx}
+    
+    # Create or update ConfigMap from application zip
+    echo "Creating ConfigMap for application package..."
+    kubectl create configmap ${APP_NAME}-update-package --from-file=app.zip=${APP_ZIP} -n ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Get the job template
+    JOB_TEMPLATE=$(kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-job-templates -n ${NAMESPACE} -o jsonpath='{.data.update-job\.yaml}')
+    
+    # Replace the placeholder with the actual ConfigMap name
+    JOB_YAML=$(echo "${JOB_TEMPLATE}" | sed "s/APP_PACKAGE_CONFIGMAP/${APP_NAME}-update-package/g")
+    
+    # Apply the job
+    echo "Creating update job..."
+    echo "${JOB_YAML}" | kubectl apply -f - -n ${NAMESPACE}
+    
+    # Get the job name
+    JOB_NAME=$(kubectl get jobs -n ${NAMESPACE} -l app.kubernetes.io/component=app-updater --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+    
+    echo "Application update started. Job name: ${JOB_NAME}"
+    echo "To monitor progress, run: kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE}"
+    
+  remove-application.sh: |-
+    #!/bin/bash
+    set -e
+    
+    # This script removes an Intrexx application from the portal
+    
+    if [ "$#" -lt 1 ]; then
+      echo "Usage: $0 <application-name> [namespace]"
+      exit 1
+    fi
+    
+    APP_NAME=$1
+    NAMESPACE=${2:-intrexx}
+    
+    # Get the job template
+    JOB_TEMPLATE=$(kubectl get configmap {{ include "intrexx-portal.fullname" . }}-app-job-templates -n ${NAMESPACE} -o jsonpath='{.data.remove-job\.yaml}')
+    
+    # Replace the placeholder with the actual application name
+    JOB_YAML=$(echo "${JOB_TEMPLATE}" | sed "s/APP_NAME/${APP_NAME}/g")
+    
+    # Apply the job
+    echo "Creating removal job..."
+    echo "${JOB_YAML}" | kubectl apply -f - -n ${NAMESPACE}
+    
+    # Get the job name
+    JOB_NAME=$(kubectl get jobs -n ${NAMESPACE} -l app.kubernetes.io/component=app-remover --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+    
+    echo "Application removal started. Job name: ${JOB_NAME}"
+    echo "To monitor progress, run: kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE}"
+    
+  list-applications.sh: |-
+    #!/bin/bash
+    set -e
+    
+    # This script lists all installed Intrexx applications
+    
+    NAMESPACE=${1:-intrexx}
+    
+    echo "Listing installed applications..."
+    kubectl exec -it $(kubectl get pods -l app.kubernetes.io/name={{ include "intrexx-portal.name" . }} -n ${NAMESPACE} -o jsonpath='{.items[0].metadata.name}') -n ${NAMESPACE} -- bash -c "cd /opt/intrexx/bin && ./ixdeployer.sh -l -p {{ .Values.intrexx.portalName }}"
+{{- end }}

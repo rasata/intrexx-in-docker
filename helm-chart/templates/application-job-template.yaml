@@ -1,0 +1,150 @@
+{{- if .Values.intrexx.applications.lifecycle.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "intrexx-portal.fullname" . }}-app-job-templates
+  labels:
+    {{- include "intrexx-portal.labels" . | nindent 4 }}
+data:
+  deploy-job.yaml: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      generateName: deploy-app-
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/managed-by: intrexx-app-manager
+        app.kubernetes.io/part-of: {{ include "intrexx-portal.fullname" . }}
+        app.kubernetes.io/component: app-deployer
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "intrexx-portal.serviceAccountName" . }}
+          containers:
+          - name: deploy-app
+            image: {{ .Values.intrexx.applications.lifecycle.deployerImage }}
+            command: ["/bin/bash", "/scripts/deploy-app.sh"]
+            args:
+            - "/tmp/app/app.zip"
+            - "{{ .Values.intrexx.portalName }}"
+            volumeMounts:
+            - name: app-package
+              mountPath: /tmp/app
+            - name: portal-data
+              mountPath: /opt/intrexx/org
+            - name: intrexx-cfg
+              mountPath: /opt/intrexx/cfg
+            - name: app-scripts
+              mountPath: /scripts
+            resources:
+              {{- toYaml .Values.intrexx.applications.lifecycle.resources | nindent 14 }}
+          restartPolicy: Never
+          volumes:
+          - name: app-package
+            configMap:
+              name: APP_PACKAGE_CONFIGMAP
+          - name: portal-data
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-portal-data
+          - name: intrexx-cfg
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-cfg
+          - name: app-scripts
+            configMap:
+              name: {{ include "intrexx-portal.fullname" . }}-app-scripts
+              defaultMode: 0755
+      backoffLimit: 3
+  
+  update-job.yaml: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      generateName: update-app-
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/managed-by: intrexx-app-manager
+        app.kubernetes.io/part-of: {{ include "intrexx-portal.fullname" . }}
+        app.kubernetes.io/component: app-updater
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "intrexx-portal.serviceAccountName" . }}
+          containers:
+          - name: update-app
+            image: {{ .Values.intrexx.applications.lifecycle.deployerImage }}
+            command: ["/bin/bash", "/scripts/update-app.sh"]
+            args:
+            - "/tmp/app/app.zip"
+            - "{{ .Values.intrexx.portalName }}"
+            volumeMounts:
+            - name: app-package
+              mountPath: /tmp/app
+            - name: portal-data
+              mountPath: /opt/intrexx/org
+            - name: intrexx-cfg
+              mountPath: /opt/intrexx/cfg
+            - name: app-scripts
+              mountPath: /scripts
+            resources:
+              {{- toYaml .Values.intrexx.applications.lifecycle.resources | nindent 14 }}
+          restartPolicy: Never
+          volumes:
+          - name: app-package
+            configMap:
+              name: APP_PACKAGE_CONFIGMAP
+          - name: portal-data
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-portal-data
+          - name: intrexx-cfg
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-cfg
+          - name: app-scripts
+            configMap:
+              name: {{ include "intrexx-portal.fullname" . }}-app-scripts
+              defaultMode: 0755
+      backoffLimit: 3
+  
+  remove-job.yaml: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      generateName: remove-app-
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/managed-by: intrexx-app-manager
+        app.kubernetes.io/part-of: {{ include "intrexx-portal.fullname" . }}
+        app.kubernetes.io/component: app-remover
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "intrexx-portal.serviceAccountName" . }}
+          containers:
+          - name: remove-app
+            image: {{ .Values.intrexx.applications.lifecycle.deployerImage }}
+            command: ["/bin/bash", "/scripts/remove-app.sh"]
+            args:
+            - "APP_NAME"
+            - "{{ .Values.intrexx.portalName }}"
+            volumeMounts:
+            - name: portal-data
+              mountPath: /opt/intrexx/org
+            - name: intrexx-cfg
+              mountPath: /opt/intrexx/cfg
+            - name: app-scripts
+              mountPath: /scripts
+            resources:
+              {{- toYaml .Values.intrexx.applications.lifecycle.resources | nindent 14 }}
+          restartPolicy: Never
+          volumes:
+          - name: portal-data
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-portal-data
+          - name: intrexx-cfg
+            persistentVolumeClaim:
+              claimName: {{ include "intrexx-portal.fullname" . }}-cfg
+          - name: app-scripts
+            configMap:
+              name: {{ include "intrexx-portal.fullname" . }}-app-scripts
+              defaultMode: 0755
+      backoffLimit: 3
+{{- end }}
